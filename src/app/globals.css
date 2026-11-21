@@ -137,14 +137,8 @@
 }
 
 .map-shell .maplibregl-ctrl-top-left {
-  top: 11.5rem;
+  top: var(--map-chrome-top, 9.5rem);
   left: 0.75rem;
-}
-
-@media (min-width: 768px) {
-  .map-shell .maplibregl-ctrl-top-left {
-    top: 7.25rem;
-  }
 }
 
 .map-shell .maplibregl-ctrl-attrib {

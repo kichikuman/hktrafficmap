@@ -1,12 +1,13 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { DetailPanel } from "@/components/detail-panel"
 import { MapCanvas } from "@/components/map-canvas"
+import { StationSearch } from "@/components/station-search"
 import { cameraByKey, network, stationByCode } from "@/lib/geo"
-import type { Selection } from "@/lib/types"
+import type { Selection, Station } from "@/lib/types"
 
 export function MapApp() {
   const [showLines, setShowLines] = useState(true)
@@ -15,8 +16,11 @@ export function MapApp() {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [styleError, setStyleError] = useState<string | null>(null)
+  const [focus, setFocus] = useState<{ code: string; nonce: number } | null>(null)
   const lineSwitchId = useId()
   const cameraSwitchId = useId()
+  const shellRef = useRef<HTMLElement>(null)
+  const headerRef = useRef<HTMLElement>(null)
 
   const station = selection?.type === "station" ? stationByCode.get(selection.code) : undefined
   const camera = selection?.type === "camera" ? cameraByKey.get(selection.key) : undefined
@@ -31,12 +35,38 @@ export function MapApp() {
     if (!checked && selection?.type === "camera") setSelection(null)
   }
 
+  function chooseStation(stationToOpen: Station) {
+    setShowLines(true)
+    setLegendOpen(false)
+    setSelection({ type: "station", code: stationToOpen.code })
+    setFocus((current) => ({ code: stationToOpen.code, nonce: (current?.nonce ?? 0) + 1 }))
+  }
+
+  useEffect(() => {
+    const shell = shellRef.current
+    const header = headerRef.current
+    if (!shell || !header) return
+    const update = () => {
+      const top = header.getBoundingClientRect().bottom - shell.getBoundingClientRect().top + 8
+      shell.style.setProperty("--map-chrome-top", `${Math.ceil(top)}px`)
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    window.addEventListener("resize", update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", update)
+    }
+  }, [legendOpen])
+
   return (
-    <main className="map-shell relative h-dvh overflow-hidden bg-[#e7e5e4] text-foreground">
+    <main ref={shellRef} className="map-shell relative h-dvh overflow-hidden bg-[#e7e5e4] text-foreground">
       <MapCanvas
         showLines={showLines}
         showCameras={showCameras}
         selection={selection}
+        focus={focus}
         onSelect={(next) => {
           setSelection(next)
           if (next) setLegendOpen(false)
@@ -44,8 +74,11 @@ export function MapApp() {
         onStyleError={setStyleError}
       />
 
-      <header className="absolute inset-x-3 top-3 z-20 rounded-2xl border bg-background/95 shadow-lg backdrop-blur-md">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
+      <header
+        ref={headerRef}
+        className="absolute inset-x-3 top-3 z-20 rounded-2xl border bg-background/95 shadow-lg backdrop-blur-md"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 pt-2.5">
           <div className="min-w-[12rem] flex-1">
             <h1 className="text-base font-semibold tracking-tight">香港智慧城市地圖</h1>
             <p className="text-xs text-muted-foreground">點車站查到站班次，點快拍點看最新照片</p>
@@ -71,6 +104,9 @@ export function MapApp() {
           >
             路綫圖例
           </Button>
+        </div>
+        <div className="px-3 pt-2">
+          <StationSearch onSelect={chooseStation} />
         </div>
         {legendOpen ? (
           <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t px-3 py-2.5 sm:grid-cols-5">

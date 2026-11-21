@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { Map as MaplibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { cameraGeoJson, lineGeoJson, stationGeoJson } from "@/lib/geo"
+import { cameraGeoJson, lineGeoJson, stationByCode, stationGeoJson } from "@/lib/geo"
 import { mapFailureMessage } from "@/lib/map-status"
 import type { Selection } from "@/lib/types"
 
@@ -14,6 +14,7 @@ type MapCanvasProps = {
   showLines: boolean
   showCameras: boolean
   selection: Selection | null
+  focus: { code: string; nonce: number } | null
   onSelect: (selection: Selection | null) => void
   onStyleError: (message: string | null) => void
 }
@@ -22,6 +23,7 @@ export function MapCanvas({
   showLines,
   showCameras,
   selection,
+  focus,
   onSelect,
   onStyleError,
 }: MapCanvasProps) {
@@ -285,6 +287,18 @@ export function MapCanvas({
       map.setFilter("camera-selected", ["==", ["get", "key"], cameraKey])
     }
   }, [ready, selection])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map || !focus) return
+    const station = stationByCode.get(focus.code)
+    if (!station) return
+    map.easeTo({
+      center: [station.lon, station.lat],
+      zoom: Math.max(map.getZoom(), 14),
+      duration: 650,
+    })
+  }, [ready, focus])
 
   return <div ref={containerRef} className="absolute inset-0" />
 }
