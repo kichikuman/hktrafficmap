@@ -50,6 +50,8 @@ npm run build
 NEXT_PUBLIC_TRAIN_CACHE_URL=https://你的-r2-網址/trains.json npm run build
 ```
 
+已發佈的網站是 https://hk-smart-map.alan-cm-lee.workers.dev 。列車檔是 `https://pub-e0d43d1b8e22416b8a24a774f308c16b.r2.dev/trains.json`。
+
 發佈前要先建立 R2 bucket `hk-map-trains`，允許公開讀取，並套用 `workers/r2-cors.json`。然後：
 
 ```bash
