@@ -233,7 +233,7 @@ export function MapCanvas({
           source: "trains",
           layout: {
             "icon-image": ["get", "icon"],
-            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 13, 0.62, 16, 0.8],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.72, 13, 0.95, 16, 1.15],
             "icon-rotate": ["get", "bearing"],
             "icon-rotation-alignment": "map",
             "icon-allow-overlap": true,
