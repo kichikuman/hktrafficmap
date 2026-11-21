@@ -61,11 +61,20 @@ export function MapCanvas({
           [113.7, 22.08],
           [114.58, 22.64],
         ],
-        dragRotate: false,
+        dragRotate: true,
         pitchWithRotate: false,
+        touchPitch: false,
         attributionControl: { compact: true },
       })
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left")
+      map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), "top-left")
+      const compass = map.getContainer().querySelector(".maplibregl-ctrl-compass")
+      if (compass instanceof HTMLButtonElement) {
+        compass.title = "轉回北方"
+        compass.setAttribute("aria-label", "轉回北方")
+      }
+      map.getCanvas().addEventListener("contextmenu", (event) => {
+        event.preventDefault()
+      })
       mapRef.current = map
 
       let loaded = false
