@@ -52,7 +52,7 @@ export function MapCanvas({
       maplibregl.setWorkerUrl("/maplibre-gl-worker.js")
       map = new maplibregl.Map({
         container,
-        style: "https://tiles.openfreemap.org/styles/positron",
+        style: "https://tiles.openfreemap.org/styles/liberty",
         center: [114.15, 22.36],
         zoom: 10,
         minZoom: 9,
