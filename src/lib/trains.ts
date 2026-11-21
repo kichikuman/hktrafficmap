@@ -4,7 +4,7 @@ export type TrainFeatureCollection = {
   type: "FeatureCollection"
   features: {
     type: "Feature"
-    properties: { id: string; color: string; bearing: number; title: string; detail: string }
+    properties: { id: string; icon: string; color: string; bearing: number; title: string; detail: string }
     geometry: { type: "Point"; coordinates: number[] }
   }[]
 }
@@ -94,17 +94,10 @@ function radians(value: number): number {
   return (value * Math.PI) / 180
 }
 
-export function pointAlong(coordinates: number[][], fraction: number): { point: number[]; bearing: number } {
-  const lengths: number[] = []
-  let total = 0
-  for (let index = 1; index < coordinates.length; index += 1) {
-    const start = coordinates[index - 1]
-    const end = coordinates[index]
-    const length = Math.hypot(end[0] - start[0], end[1] - start[1])
-    lengths.push(length)
-    total += length
-  }
-  const target = Math.max(0, Math.min(1, fraction)) * total
+const LOOKAHEAD = 0.0004
+
+function pointAt(coordinates: number[][], lengths: number[], total: number, distance: number): number[] {
+  const target = Math.max(0, Math.min(total, distance))
   let walked = 0
   for (let index = 0; index < lengths.length; index += 1) {
     const length = lengths[index]
@@ -112,15 +105,30 @@ export function pointAlong(coordinates: number[][], fraction: number): { point: 
     const end = coordinates[index + 1]
     if (walked + length >= target || index === lengths.length - 1) {
       const ratio = length === 0 ? 0 : (target - walked) / length
-      return {
-        point: [start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio],
-        bearing: (degrees(start, end) + 360) % 360,
-      }
+      return [start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio]
     }
     walked += length
   }
-  const last = coordinates[coordinates.length - 1]
-  return { point: last, bearing: 0 }
+  return coordinates[coordinates.length - 1]
+}
+
+export function pointAlong(coordinates: number[][], fraction: number): { point: number[]; bearing: number } {
+  const lengths: number[] = []
+  let total = 0
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const start = coordinates[index - 1]
+    const end = coordinates[index]
+    lengths.push(Math.hypot(end[0] - start[0], end[1] - start[1]))
+    total += lengths[lengths.length - 1]
+  }
+  const target = Math.max(0, Math.min(1, fraction)) * total
+  const point = pointAt(coordinates, lengths, total, target)
+  const ahead = pointAt(coordinates, lengths, total, Math.min(total, target + LOOKAHEAD))
+  const bearing =
+    Math.hypot(ahead[0] - point[0], ahead[1] - point[1]) < 1e-8
+      ? (degrees(coordinates[0], coordinates[coordinates.length - 1]) + 360) % 360
+      : (degrees(point, ahead) + 360) % 360
+  return { point, bearing }
 }
 
 function shiftRight(point: number[], bearing: number, metres: number): number[] {
@@ -231,6 +239,7 @@ export function trainCollection(
         type: "Feature",
         properties: {
           id: train.id,
+          icon: `train-${train.line}`,
           color: colors[train.line] ?? "#1c1917",
           bearing: position.bearing,
           title: `往${destination}`,

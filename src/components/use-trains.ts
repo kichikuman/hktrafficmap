@@ -1,20 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { lineByCode, stationNames } from "@/lib/geo"
 import { fetchArrivals } from "@/lib/train-feed"
-import { placeTrains, trainCollection, type PlacedTrain, type TrainFeatureCollection } from "@/lib/trains"
+import { placeTrains, type PlacedTrain } from "@/lib/trains"
 
 const REFRESH_MS = 90_000
 
 export type TrainStatus = "off" | "loading" | "ready" | "stale"
 
-const empty: TrainFeatureCollection = { type: "FeatureCollection", features: [] }
-
-const colors = Object.fromEntries([...lineByCode.values()].map((line) => [line.code, line.color]))
-
-export function useTrains(enabled: boolean): { trains: TrainFeatureCollection; status: TrainStatus } {
-  const [trains, setTrains] = useState<TrainFeatureCollection>(empty)
+export function useTrains(enabled: boolean): { trains: PlacedTrain[]; status: TrainStatus } {
+  const [trains, setTrains] = useState<PlacedTrain[]>([])
   const [status, setStatus] = useState<TrainStatus>("off")
 
   useEffect(() => {
@@ -25,10 +20,6 @@ export function useTrains(enabled: boolean): { trains: TrainFeatureCollection; s
     let refreshMs = REFRESH_MS
     let snapshot: PlacedTrain[] = []
     const controller = new AbortController()
-
-    const publish = (now: number) => {
-      setTrains(trainCollection(snapshot, now, stationNames, colors))
-    }
 
     const run = async () => {
       if (running || cancelled || document.visibilityState === "hidden") return
@@ -41,7 +32,7 @@ export function useTrains(enabled: boolean): { trains: TrainFeatureCollection; s
         snapshot = placeTrains(result.arrivals, now)
         fetchedAt = now
         refreshMs = result.limited || result.ok === 0 ? 20_000 : REFRESH_MS
-        publish(now)
+        setTrains(snapshot)
         setStatus(result.limited || result.ok === 0 ? "stale" : "ready")
       } catch (error) {
         if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return
@@ -56,10 +47,8 @@ export function useTrains(enabled: boolean): { trains: TrainFeatureCollection; s
     void run()
     const timer = window.setInterval(() => {
       if (document.visibilityState === "hidden") return
-      const now = Date.now()
-      if (fetchedAt === 0 || now - fetchedAt >= refreshMs) void run()
-      else publish(now)
-    }, 1000)
+      if (fetchedAt === 0 || Date.now() - fetchedAt >= refreshMs) void run()
+    }, 5000)
     const onVisible = () => {
       if (document.visibilityState === "visible" && (fetchedAt === 0 || Date.now() - fetchedAt >= refreshMs)) {
         void run()
@@ -74,5 +63,5 @@ export function useTrains(enabled: boolean): { trains: TrainFeatureCollection; s
     }
   }, [enabled])
 
-  return { trains: enabled ? trains : empty, status: enabled ? status : "off" }
+  return { trains: enabled ? trains : [], status: enabled ? status : "off" }
 }

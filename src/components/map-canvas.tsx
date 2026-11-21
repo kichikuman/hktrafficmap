@@ -3,21 +3,22 @@
 import { useEffect, useRef, useState } from "react"
 import type { GeoJSONSource, Map as MaplibreMap, Popup } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { cameraGeoJson, lineGeoJson, stationByCode, stationGeoJson } from "@/lib/geo"
+import { cameraGeoJson, lineByCode, lineGeoJson, stationByCode, stationGeoJson, stationNames } from "@/lib/geo"
 import { mapFailureMessage } from "@/lib/map-status"
-import type { TrainFeatureCollection } from "@/lib/trains"
+import { trainCollection, type PlacedTrain, type TrainFeatureCollection } from "@/lib/trains"
 import type { Selection } from "@/lib/types"
 
 const MTR_LAYERS = ["line-casing", "line", "stations", "station-label", "station-selected"]
 const CAMERA_LAYERS = ["cameras", "camera-selected"]
-const TRAIN_LAYERS = ["train-halo", "trains"]
+const TRAIN_LAYERS = ["trains"]
 const EMPTY_TRAINS: TrainFeatureCollection = { type: "FeatureCollection", features: [] }
+const trainColors = Object.fromEntries([...lineByCode.values()].map((line) => [line.code, line.color]))
 
 type MapCanvasProps = {
   showLines: boolean
   showCameras: boolean
   showTrains: boolean
-  trains: TrainFeatureCollection
+  trains: PlacedTrain[]
   selection: Selection | null
   focus: { code: string; nonce: number } | null
   onSelect: (selection: Selection | null) => void
@@ -220,31 +221,23 @@ export function MapCanvas({
           },
         })
         map.addSource("trains", { type: "geojson", data: EMPTY_TRAINS })
-        if (!map.hasImage("train")) map.addImage("train", trainIcon())
+        for (const [code, color] of Object.entries(trainColors)) {
+          const imageId = `train-${code}`
+          if (!map.hasImage(imageId)) map.addImage(imageId, drawTrain(color), { pixelRatio: 2 })
+        }
         const trainVisibility = showTrainsRef.current ? "visible" : "none"
-        map.addLayer({
-          id: "train-halo",
-          type: "circle",
-          source: "trains",
-          layout: { visibility: trainVisibility },
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 6, 14, 10],
-            "circle-color": "#ffffff",
-            "circle-stroke-color": ["get", "color"],
-            "circle-stroke-width": 3,
-          },
-        })
         map.addLayer({
           id: "trains",
           type: "symbol",
           source: "trains",
           layout: {
-            "icon-image": "train",
-            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.7, 14, 1],
+            "icon-image": ["get", "icon"],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 13, 0.62, 16, 0.8],
             "icon-rotate": ["get", "bearing"],
             "icon-rotation-alignment": "map",
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
+            "icon-padding": 0,
             visibility: trainVisibility,
           },
         })
@@ -265,7 +258,7 @@ export function MapCanvas({
         })
 
         map.on("click", (event) => {
-          const trainHits = map?.queryRenderedFeatures(event.point, { layers: ["trains", "train-halo"] }) ?? []
+          const trainHits = map?.queryRenderedFeatures(event.point, { layers: ["trains"] }) ?? []
           const train = trainHits.find((feature) => feature.properties?.title)
           if (train?.properties && map) {
             const coordinates = train.geometry.type === "Point" ? train.geometry.coordinates : null
@@ -304,7 +297,7 @@ export function MapCanvas({
           onSelectRef.current(null)
         })
 
-        for (const layer of ["stations", "cameras", "trains", "train-halo"]) {
+        for (const layer of ["stations", "cameras", "trains"]) {
           map.on("mouseenter", layer, () => {
             if (map) map.getCanvas().style.cursor = "pointer"
           })
@@ -344,18 +337,43 @@ export function MapCanvas({
     for (const layer of TRAIN_LAYERS) {
       if (map.getLayer(layer)) map.setLayoutProperty(layer, "visibility", trainVisibility)
     }
+    if (!showTrains || !showLines) popupRef.current?.remove()
+  }, [ready, showLines, showCameras, showTrains])
+
+  const trainsRef = useRef(trains)
+  useEffect(() => {
+    trainsRef.current = trains
+  })
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map) return
     const source = map.getSource("trains") as GeoJSONSource | undefined
-    source?.setData(showTrains ? trains : EMPTY_TRAINS)
-    const openId = openTrainRef.current
-    const open = openId ? trains.features.find((feature) => feature.properties.id === openId) : undefined
-    if (!showTrains || !open) popupRef.current?.remove()
-    else if (popupRef.current) {
-      const [lon, lat] = open.geometry.coordinates
-      popupRef.current
-        .setLngLat([lon, lat])
-        .setDOMContent(trainPopup(open.properties.title, open.properties.detail))
+    if (!showTrains || !showLines) {
+      source?.setData(EMPTY_TRAINS)
+      return
     }
-  }, [ready, showLines, showCameras, showTrains, trains])
+    let frame = 0
+    let lastDetail = ""
+    const tick = () => {
+      const data = trainCollection(trainsRef.current, Date.now(), stationNames, trainColors)
+      source?.setData(data)
+      const openId = openTrainRef.current
+      const open = openId ? data.features.find((feature) => feature.properties.id === openId) : undefined
+      if (openId && !open) popupRef.current?.remove()
+      else if (open && popupRef.current) {
+        const [lon, lat] = open.geometry.coordinates
+        popupRef.current.setLngLat([lon, lat])
+        if (open.properties.detail !== lastDetail) {
+          lastDetail = open.properties.detail
+          popupRef.current.setDOMContent(trainPopup(open.properties.title, open.properties.detail))
+        }
+      }
+      frame = window.requestAnimationFrame(tick)
+    }
+    frame = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(frame)
+  }, [ready, showTrains, showLines])
 
   useEffect(() => {
     const map = mapRef.current
@@ -396,22 +414,32 @@ function trainPopup(title: string, detail: string): HTMLDivElement {
   return root
 }
 
-function trainIcon(): { width: number; height: number; data: Uint8ClampedArray } {
-  const size = 32
-  const data = new Uint8ClampedArray(size * size * 4)
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const nx = (x + 0.5) / size - 0.5
-      const ny = (y + 0.5) / size - 0.5
-      const head = ny < -0.02 && Math.abs(nx) < (ny + 0.46) * 0.85
-      const body = ny >= -0.02 && ny < 0.34 && Math.abs(nx) < 0.14
-      if (!head && !body) continue
-      const offset = (y * size + x) * 4
-      data[offset] = 28
-      data[offset + 1] = 25
-      data[offset + 2] = 23
-      data[offset + 3] = 255
-    }
+function drawTrain(color: string): ImageData {
+  const ratio = 2
+  const width = 32
+  const height = 52
+  const canvas = document.createElement("canvas")
+  canvas.width = width * ratio
+  canvas.height = height * ratio
+  const context = canvas.getContext("2d")
+  if (!context) return new ImageData(canvas.width, canvas.height)
+  context.scale(ratio, ratio)
+  context.beginPath()
+  context.roundRect(5, 1, 22, 50, [11, 11, 5, 5])
+  context.fillStyle = "#1c1917"
+  context.fill()
+  context.beginPath()
+  context.roundRect(7, 3, 18, 46, [9, 9, 4, 4])
+  context.fillStyle = color
+  context.fill()
+  context.fillStyle = "#f8fafc"
+  context.beginPath()
+  context.roundRect(11, 7, 10, 6, 2)
+  context.fill()
+  for (const top of [18, 27, 36]) {
+    context.beginPath()
+    context.roundRect(10, top, 12, 5, 1.5)
+    context.fill()
   }
-  return { width: size, height: size, data }
+  return context.getImageData(0, 0, canvas.width, canvas.height)
 }
