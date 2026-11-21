@@ -37,7 +37,33 @@ test("covers the operating heavy-rail network and every snapshot point", () => {
     assert.ok(camera.lat > 22.15 && camera.lat < 22.58)
   }
 
+  const gap = (line: { coordinates: number[][][] }, lon: number, lat: number) => {
+    let nearest = Infinity
+    for (const part of line.coordinates) {
+      for (let index = 1; index < part.length; index += 1) {
+        const [startLon, startLat] = part[index - 1]
+        const [endLon, endLat] = part[index]
+        const dx = endLon - startLon
+        const dy = endLat - startLat
+        const denom = dx * dx + dy * dy
+        const ratio = denom === 0 ? 0 : Math.max(0, Math.min(1, ((lon - startLon) * dx + (lat - startLat) * dy) / denom))
+        nearest = Math.min(nearest, Math.hypot(lon - (startLon + ratio * dx), lat - (startLat + ratio * dy)))
+      }
+    }
+    return nearest
+  }
+
+  for (const line of network.lines) {
+    const pointCount = line.coordinates.reduce(
+      (count: number, part: number[][]) => count + part.length,
+      0,
+    )
+    assert.ok(pointCount > 40, `${line.code} 路軌點太少，仍像直線`)
+    for (const station of network.stations.filter((item: { lines: string[] }) => item.lines.includes(line.code))) {
+      assert.ok(gap(line, station.lon, station.lat) < 0.0025, `${line.code} 沒有貼近 ${station.nameZh}`)
+    }
+  }
+
   const eastRail = network.lines.find((line: { code: string }) => line.code === "EAL")
-  const spur = eastRail.coordinates.at(-1)
-  assert.deepEqual(spur[1], [racecourse.lon, racecourse.lat])
+  assert.ok(gap(eastRail, racecourse.lon, racecourse.lat) < 0.0025)
 })

@@ -116,7 +116,7 @@ export function MapApp() {
           </ul>
         ) : null}
         <p className="border-t px-3 py-1.5 text-[10px] leading-4 text-muted-foreground">
-          底圖 OpenFreeMap、OpenMapTiles、OpenStreetMap · 車站位置地政總署 · 班次港鐵 · 快拍運輸署
+          底圖 OpenFreeMap、OpenMapTiles · 路軌 OpenStreetMap · 車站位置地政總署 · 班次港鐵 · 快拍運輸署
         </p>
       </header>
 

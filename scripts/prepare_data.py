@@ -2,6 +2,8 @@
 
 Station positions come from the Lands Department 3D indoor MTR station map.
 That service does not allow browser reads, so the coordinates are saved here.
+Route shapes come from OpenStreetMap subway route relations, so the lines follow
+the tracks instead of running straight from station to station.
 """
 
 from __future__ import annotations
@@ -10,6 +12,8 @@ import csv
 import io
 import json
 import math
+import urllib.error
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -30,7 +34,7 @@ LINES = [
     ("DRL", "迪士尼綫", "#F550A6"),
 ]
 LINE_ORDER = {code: index for index, (code, _, _) in enumerate(LINES)}
-SHIFT = 0.00018
+SIMPLIFY_TOLERANCE = 0.00003
 
 
 def fetch(url: str) -> bytes:
@@ -51,32 +55,148 @@ def round_coord(lon: float, lat: float) -> list[float]:
     return [round(lon, 6), round(lat, 6)]
 
 
-def closest_on_segment(
-    start: list[float], end: list[float], point: list[float]
-) -> tuple[list[float], float]:
-    ax, ay = start
-    bx, by = end
-    px, py = point
-    dx, dy = bx - ax, by - ay
-    denom = dx * dx + dy * dy
-    ratio = 0.0 if denom == 0 else ((px - ax) * dx + (py - ay) * dy) / denom
-    ratio = max(0.0, min(1.0, ratio))
-    return [ax + dx * ratio, ay + dy * ratio], ratio
+def point_key(point: list[float]) -> tuple[float, float]:
+    return (round(point[0], 5), round(point[1], 5))
 
 
-def fan(start: list[float], end: list[float], shift: float) -> list[list[float]]:
-    ax, ay = start
-    bx, by = end
-    dx, dy = bx - ax, by - ay
-    length = math.hypot(dx, dy) or 1.0
-    px, py = -dy / length, dx / length
-    if abs(shift) < 1e-12:
-        return [start, end]
+def simplify(points: list[list[float]], tolerance: float = SIMPLIFY_TOLERANCE) -> list[list[float]]:
+    if len(points) < 3:
+        return points
+    keep = [False] * len(points)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(points) - 1)]
+    limit = tolerance * tolerance
+    while stack:
+        start, end = stack.pop()
+        ax, ay = points[start]
+        bx, by = points[end]
+        dx, dy = bx - ax, by - ay
+        denom = dx * dx + dy * dy
+        farthest = -1.0
+        index = None
+        for position in range(start + 1, end):
+            px, py = points[position]
+            if denom == 0:
+                distance = (px - ax) ** 2 + (py - ay) ** 2
+            else:
+                ratio = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / denom))
+                qx, qy = ax + ratio * dx, ay + ratio * dy
+                distance = (px - qx) ** 2 + (py - qy) ** 2
+            if distance > farthest:
+                farthest = distance
+                index = position
+        if index is not None and farthest > limit:
+            keep[index] = True
+            stack.append((start, index))
+            stack.append((index, end))
+    return [point for point, flagged in zip(points, keep) if flagged]
 
-    def point(ratio: float) -> list[float]:
-        return round_coord(ax + dx * ratio + px * shift, ay + dy * ratio + py * shift)
 
-    return [start, point(0.22), point(0.78), end]
+def stitch(polylines: list[list[list[float]]]) -> list[list[list[float]]]:
+    pool = [line for line in polylines if len(line) >= 2]
+    chains: list[list[list[float]]] = []
+    while pool:
+        chain = pool.pop()
+        extended = True
+        while extended:
+            extended = False
+            start, end = point_key(chain[0]), point_key(chain[-1])
+            for index, piece in enumerate(pool):
+                piece_start, piece_end = point_key(piece[0]), point_key(piece[-1])
+                if piece_start == end:
+                    chain.extend(piece[1:])
+                elif piece_end == end:
+                    chain.extend(reversed(piece[:-1]))
+                elif piece_end == start:
+                    chain = piece[:-1] + chain
+                elif piece_start == start:
+                    chain = list(reversed(piece[1:])) + chain
+                else:
+                    continue
+                pool.pop(index)
+                extended = True
+                break
+        chains.append([round_coord(lon, lat) for lon, lat in chain])
+    return chains
+
+
+def chain_length(chain: list[list[float]]) -> float:
+    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(chain, chain[1:]))
+
+
+def corridor(chain: list[list[float]]) -> set[tuple[float, float]]:
+    return {(round(lon, 4), round(lat, 4)) for lon, lat in chain}
+
+
+def without_duplicate_tracks(chains: list[list[list[float]]]) -> list[list[list[float]]]:
+    kept: list[list[list[float]]] = []
+    kept_corridors: list[set[tuple[float, float]]] = []
+    for chain in sorted(chains, key=chain_length, reverse=True):
+        if chain_length(chain) < 0.0004:
+            continue
+        cells = corridor(chain)
+        if len(cells) >= 4 and any(len(cells & other) / len(cells) > 0.8 for other in kept_corridors):
+            continue
+        kept.append(chain)
+        kept_corridors.append(cells)
+    return kept
+
+
+def distance_to_route(lon: float, lat: float, parts: list[list[list[float]]]) -> float:
+    best = math.inf
+    for part in parts:
+        for (start_lon, start_lat), (end_lon, end_lat) in zip(part, part[1:]):
+            dx, dy = end_lon - start_lon, end_lat - start_lat
+            denom = dx * dx + dy * dy
+            if denom == 0:
+                best = min(best, math.hypot(lon - start_lon, lat - start_lat))
+                continue
+            ratio = max(0.0, min(1.0, ((lon - start_lon) * dx + (lat - start_lat) * dy) / denom))
+            best = min(best, math.hypot(lon - (start_lon + ratio * dx), lat - (start_lat + ratio * dy)))
+    return best
+
+
+def route_geometry() -> dict[str, list[list[list[float]]]]:
+    query = """
+[out:json][timeout:180];
+relation["network"="港鐵 MTR"]["route"="subway"]["ref"~"^(ISL|TWL|KTL|TKL|EAL|TML|TCL|AEL|SIL|DRL)$"];
+out geom;
+"""
+    body = urllib.parse.urlencode({"data": query}).encode()
+    payload = None
+    last_error: Exception | None = None
+    for endpoint in (
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+    ):
+        request = urllib.request.Request(endpoint, data=body, headers={"User-Agent": "hk-smart-map/1.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                payload = json.load(response)
+            break
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            last_error = error
+    if payload is None:
+        raise SystemExit(f"讀取路軌形狀失敗：{last_error}")
+    pieces: dict[str, list[list[list[float]]]] = defaultdict(list)
+    for relation in payload["elements"]:
+        code = relation.get("tags", {}).get("ref")
+        if code not in LINE_ORDER:
+            continue
+        for member in relation.get("members", []):
+            if member.get("role") or member.get("type") != "way":
+                continue
+            geometry = member.get("geometry") or []
+            if len(geometry) < 2:
+                continue
+            pieces[code].append([[point["lon"], point["lat"]] for point in geometry])
+    routes: dict[str, list[list[list[float]]]] = {}
+    for code, _, _ in LINES:
+        simplified = [simplify(chain) for chain in stitch(pieces[code])]
+        routes[code] = without_duplicate_tracks(simplified)
+        if not routes[code]:
+            raise SystemExit(f"找不到 {code} 的路軌形狀")
+    return routes
 
 
 def main() -> None:
@@ -185,30 +305,21 @@ def main() -> None:
         if not (113.8 <= lon <= 114.5 and 22.15 <= lat <= 22.58):
             raise SystemExit(f"車站座標超出香港範圍：{name} {lon}, {lat}")
 
-    def path_coordinates(line: str, path: list[str]) -> list[list[float]]:
-        points: list[list[float]] = []
-        for start, end in pairs(path):
-            key = tuple(sorted((start, end)))
-            users = edge_users[key]
-            shift = 0.0
-            if len(users) > 1:
-                shift = (users.index(line) - (len(users) - 1) / 2) * SHIFT
-            segment = fan(station_coords[start], station_coords[end], shift)
-            points.extend(segment if not points else segment[1:])
-        return points
-
+    tracked = route_geometry()
     line_features = []
     for code, name, color in LINES:
-        parts = [path_coordinates(code, path) for path in paths[code]]
+        parts = tracked[code]
+        far: list[str] = []
+        checked = {item for path in paths[code] for item in path}
         if code == "EAL":
-            junction, ratio = closest_on_segment(
-                station_coords["FOT"], station_coords["SHT"], station_coords["RAC"]
-            )
-            if ratio < 0.08:
-                junction = station_coords["FOT"]
-            elif ratio > 0.92:
-                junction = station_coords["SHT"]
-            parts.append([round_coord(*junction), station_coords["RAC"]])
+            checked.add("RAC")
+        for station_code in checked:
+            lon, lat = station_coords[station_code]
+            nearest = distance_to_route(lon, lat, parts)
+            if nearest > 0.0025:
+                far.append(f"{station_code}:{nearest:.4f}")
+        if far:
+            raise SystemExit(f"{code} 路軌離車站太遠 " + ", ".join(far))
         line_features.append(
             {
                 "code": code,
