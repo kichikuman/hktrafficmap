@@ -137,13 +137,8 @@
 }
 
 .map-shell .maplibregl-ctrl-top-left {
-  top: var(--map-chrome-top, 4.25rem);
+  top: 0.75rem;
   left: 0.75rem;
-}
-
-.map-shell .station-search {
-  top: var(--map-chrome-top, 4.25rem);
-  left: 3.75rem;
 }
 
 .map-shell .maplibregl-ctrl-attrib {

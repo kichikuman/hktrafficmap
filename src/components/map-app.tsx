@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState } from "react"
+import { useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { DetailPanel } from "@/components/detail-panel"
@@ -19,8 +19,6 @@ export function MapApp() {
   const [focus, setFocus] = useState<{ code: string; nonce: number } | null>(null)
   const lineSwitchId = useId()
   const cameraSwitchId = useId()
-  const shellRef = useRef<HTMLElement>(null)
-  const headerRef = useRef<HTMLElement>(null)
 
   const station = selection?.type === "station" ? stationByCode.get(selection.code) : undefined
   const camera = selection?.type === "camera" ? cameraByKey.get(selection.key) : undefined
@@ -42,26 +40,8 @@ export function MapApp() {
     setFocus((current) => ({ code: stationToOpen.code, nonce: (current?.nonce ?? 0) + 1 }))
   }
 
-  useEffect(() => {
-    const shell = shellRef.current
-    const header = headerRef.current
-    if (!shell || !header) return
-    const update = () => {
-      const top = header.getBoundingClientRect().bottom - shell.getBoundingClientRect().top + 8
-      shell.style.setProperty("--map-chrome-top", `${Math.ceil(top)}px`)
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(header)
-    window.addEventListener("resize", update)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", update)
-    }
-  }, [legendOpen])
-
   return (
-    <main ref={shellRef} className="map-shell relative h-dvh overflow-hidden bg-[#e7e5e4] text-foreground">
+    <main className="map-shell relative h-dvh overflow-hidden bg-[#e7e5e4] text-foreground">
       <MapCanvas
         showLines={showLines}
         showCameras={showCameras}
@@ -74,57 +54,51 @@ export function MapApp() {
         onStyleError={setStyleError}
       />
 
-      <header
-        ref={headerRef}
-        className={`absolute inset-x-3 top-3 z-20 border bg-background/95 shadow-lg backdrop-blur-md ${
-          legendOpen ? "rounded-2xl" : "rounded-full"
-        }`}
-      >
-        <div className="flex h-10 items-center gap-2 px-3 sm:gap-3">
-          <h1 className="min-w-0 flex-1 truncate text-sm font-semibold" title="香港智慧城市地圖">
-            香港地圖
-          </h1>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Switch id={lineSwitchId} size="sm" checked={showLines} onCheckedChange={changeLines} />
-            <label htmlFor={lineSwitchId} className="text-sm">
-              港鐵
-            </label>
+      <h1 className="sr-only">香港智慧城市地圖</h1>
+      <div className="pointer-events-none absolute top-3 left-[3.75rem] z-20 flex max-w-[calc(100%-4.5rem)] flex-col-reverse items-start gap-2 min-[40rem]:flex-row">
+        <StationSearch onSelect={chooseStation} onActivate={() => setLegendOpen(false)} />
+        <div className="pointer-events-auto flex w-max max-w-full flex-col items-start gap-2">
+          <div className="flex h-10 items-center gap-2 rounded-full border bg-background/95 px-2.5 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-1.5">
+              <Switch id={lineSwitchId} size="sm" checked={showLines} onCheckedChange={changeLines} />
+              <label htmlFor={lineSwitchId} className="text-sm">
+                港鐵
+              </label>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Switch id={cameraSwitchId} size="sm" checked={showCameras} onCheckedChange={changeCameras} />
+              <label htmlFor={cameraSwitchId} className="text-sm">
+                快拍
+              </label>
+            </div>
+            <Button
+              type="button"
+              variant={legendOpen ? "secondary" : "outline"}
+              size="xs"
+              aria-expanded={legendOpen}
+              aria-label="路綫圖例"
+              onClick={() => setLegendOpen((open) => !open)}
+            >
+              圖例
+            </Button>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Switch id={cameraSwitchId} size="sm" checked={showCameras} onCheckedChange={changeCameras} />
-            <label htmlFor={cameraSwitchId} className="text-sm">
-              快拍
-            </label>
-          </div>
-          <Button
-            type="button"
-            variant={legendOpen ? "secondary" : "outline"}
-            size="xs"
-            className="shrink-0"
-            aria-expanded={legendOpen}
-            onClick={() => setLegendOpen((open) => !open)}
-          >
-            路綫圖例
-          </Button>
+          {legendOpen ? (
+            <ul className="grid w-[16.5rem] max-w-full grid-cols-2 gap-x-3 gap-y-1.5 rounded-2xl border bg-background/95 p-2.5 shadow-xl backdrop-blur-md">
+              {network.lines.map((line) => (
+                <li key={line.code} className="flex items-center gap-2 text-xs">
+                  <span className="h-1.5 w-5 shrink-0 rounded-full" style={{ backgroundColor: line.color }} />
+                  {line.nameZh}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
-        {legendOpen ? (
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t px-3 py-2 sm:grid-cols-5">
-            {network.lines.map((line) => (
-              <li key={line.code} className="flex items-center gap-2 text-xs">
-                <span className="h-1.5 w-5 rounded-full" style={{ backgroundColor: line.color }} />
-                {line.nameZh}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </header>
-
-      <StationSearch onSelect={chooseStation} />
+      </div>
 
       {!showLines && !showCameras ? (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 px-6 text-center">
           <p className="inline-block rounded-2xl bg-background/95 px-4 py-3 text-sm shadow-lg">
-            港鐵網絡和交通快拍都已隱藏。請在上方重新開啟。
+            港鐵網絡和交通快拍都已隱藏。請在左上方重新開啟。
           </p>
         </div>
       ) : null}

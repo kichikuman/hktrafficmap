@@ -9,9 +9,10 @@ import type { Station } from "@/lib/types"
 
 type StationSearchProps = {
   onSelect: (station: Station) => void
+  onActivate?: () => void
 }
 
-export function StationSearch({ onSelect }: StationSearchProps) {
+export function StationSearch({ onSelect, onActivate }: StationSearchProps) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -61,7 +62,7 @@ export function StationSearch({ onSelect }: StationSearchProps) {
   return (
     <div
       ref={containerRef}
-      className="station-search pointer-events-auto absolute top-[var(--map-chrome-top,4.25rem)] left-[3.75rem] z-20 w-[17.5rem] max-w-[calc(100%-4.75rem)]"
+      className="pointer-events-auto relative w-[17.5rem] max-w-full"
     >
       <label htmlFor={`${listId}-input`} className="sr-only">
         搜尋港鐵站
@@ -83,8 +84,12 @@ export function StationSearch({ onSelect }: StationSearchProps) {
             setQuery(event.target.value)
             setActiveIndex(0)
             setOpen(true)
+            onActivate?.()
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true)
+            onActivate?.()
+          }}
           onKeyDown={onKeyDown}
         />
         {query ? (
