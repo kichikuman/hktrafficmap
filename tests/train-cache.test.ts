@@ -76,6 +76,29 @@ test("reads a station board and train list from the shared file", () => {
   assert.equal(board?.state, "board")
   if (board?.state === "board") assert.equal(board.directions[0][0]?.destination, "往柴灣")
   assert.equal(arrivalsFromCache(doc)[0]?.dest, "CHW")
+  const legacy: TrainCache = {
+    updatedAt: doc.updatedAt,
+    entries: {
+      "AEL-AIR": {
+        fetchedAt: doc.updatedAt,
+        ok: true,
+        payload: {
+          status: 1,
+          data: {
+            "AEL-AIR": {
+              UP: [{ dest: "AWE", ttnt: "4", valid: "Y", time: "2026-11-21 15:04:00" }],
+              DOWN: [{ dest: "HOK", ttnt: "3", valid: "Y", time: "2026-11-21 15:03:00" }],
+            },
+          },
+        },
+      },
+    },
+  }
+  const legacyArrivals = arrivalsFromCache(legacy)
+  assert.deepEqual(
+    legacyArrivals.map((train) => train.dest).sort(),
+    ["AWE", "HOK"],
+  )
   assert.equal(scheduleFromCache(doc, "TWL", "CEN", {}, false, now), null)
   assert.equal(parseTrainCache({ updatedAt: "x" }), null)
 })

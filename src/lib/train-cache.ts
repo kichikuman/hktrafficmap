@@ -210,7 +210,7 @@ function payloadFromEntry(key: string, entry: CacheEntry): unknown {
 export function arrivalsFromCache(doc: TrainCache): Arrival[] {
   const arrivals: Arrival[] = []
   for (const [key, entry] of Object.entries(doc.entries)) {
-    if (!entry.up && !entry.down) continue
+    if (!entry.up && !entry.down && !entry.payload) continue
     const split = key.indexOf("-")
     if (split <= 0) continue
     arrivals.push(...readArrivals(payloadFromEntry(key, entry), key.slice(0, split), key.slice(split + 1)))
