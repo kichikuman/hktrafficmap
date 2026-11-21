@@ -12,8 +12,8 @@ import type { Selection, Station } from "@/lib/types"
 
 export function MapApp() {
   const [showLines, setShowLines] = useState(true)
-  const [showCameras, setShowCameras] = useState(true)
-  const [showTrains, setShowTrains] = useState(false)
+  const [showCameras, setShowCameras] = useState(false)
+  const [showTrains, setShowTrains] = useState(true)
   const [legendOpen, setLegendOpen] = useState(false)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
