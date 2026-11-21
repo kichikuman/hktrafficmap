@@ -76,21 +76,22 @@ export function MapApp() {
 
       <header
         ref={headerRef}
-        className="absolute inset-x-3 top-3 z-20 rounded-2xl border bg-background/95 shadow-lg backdrop-blur-md"
+        className={`absolute inset-x-3 top-3 z-20 border bg-background/95 shadow-lg backdrop-blur-md ${
+          legendOpen ? "rounded-2xl" : "rounded-full"
+        }`}
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
-          <div className="min-w-[12rem] flex-1">
-            <h1 className="text-base font-semibold tracking-tight">香港智慧城市地圖</h1>
-            <p className="text-xs text-muted-foreground">點車站查到站班次，點快拍點看最新照片</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id={lineSwitchId} checked={showLines} onCheckedChange={changeLines} />
+        <div className="flex h-10 items-center gap-2 px-3 sm:gap-3">
+          <h1 className="min-w-0 flex-1 truncate text-sm font-semibold" title="香港智慧城市地圖">
+            香港地圖
+          </h1>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Switch id={lineSwitchId} size="sm" checked={showLines} onCheckedChange={changeLines} />
             <label htmlFor={lineSwitchId} className="text-sm">
               港鐵
             </label>
           </div>
-          <div className="flex items-center gap-2">
-            <Switch id={cameraSwitchId} checked={showCameras} onCheckedChange={changeCameras} />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Switch id={cameraSwitchId} size="sm" checked={showCameras} onCheckedChange={changeCameras} />
             <label htmlFor={cameraSwitchId} className="text-sm">
               快拍
             </label>
@@ -98,7 +99,8 @@ export function MapApp() {
           <Button
             type="button"
             variant={legendOpen ? "secondary" : "outline"}
-            size="sm"
+            size="xs"
+            className="shrink-0"
             aria-expanded={legendOpen}
             onClick={() => setLegendOpen((open) => !open)}
           >
@@ -106,7 +108,7 @@ export function MapApp() {
           </Button>
         </div>
         {legendOpen ? (
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t px-3 py-2.5 sm:grid-cols-5">
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t px-3 py-2 sm:grid-cols-5">
             {network.lines.map((line) => (
               <li key={line.code} className="flex items-center gap-2 text-xs">
                 <span className="h-1.5 w-5 rounded-full" style={{ backgroundColor: line.color }} />
@@ -115,9 +117,6 @@ export function MapApp() {
             ))}
           </ul>
         ) : null}
-        <p className="border-t px-3 py-1.5 text-[10px] leading-4 text-muted-foreground">
-          底圖 OpenFreeMap、OpenMapTiles · 路軌 OpenStreetMap · 車站位置地政總署 · 班次港鐵 · 快拍運輸署
-        </p>
       </header>
 
       <StationSearch onSelect={chooseStation} />

@@ -61,7 +61,7 @@ export function StationSearch({ onSelect }: StationSearchProps) {
   return (
     <div
       ref={containerRef}
-      className="station-search pointer-events-auto absolute top-[var(--map-chrome-top,7.5rem)] left-[3.75rem] z-20 w-[17.5rem] max-w-[calc(100%-4.75rem)]"
+      className="station-search pointer-events-auto absolute top-[var(--map-chrome-top,4.25rem)] left-[3.75rem] z-20 w-[17.5rem] max-w-[calc(100%-4.75rem)]"
     >
       <label htmlFor={`${listId}-input`} className="sr-only">
         搜尋港鐵站

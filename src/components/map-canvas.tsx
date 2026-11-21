@@ -63,7 +63,10 @@ export function MapCanvas({
         dragRotate: true,
         pitchWithRotate: false,
         touchPitch: false,
-        attributionControl: { compact: true },
+        attributionControl: {
+          compact: true,
+          customAttribution: "路軌 OpenStreetMap · 車站位置地政總署 · 班次港鐵 · 快拍運輸署",
+        },
       })
       map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), "top-left")
       const compass = map.getContainer().querySelector(".maplibregl-ctrl-compass")
