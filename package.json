@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "prepare-data": "python3 scripts/prepare_data.py",
     "predev": "node scripts/copy-worker.mjs",
-    "prebuild": "node scripts/copy-worker.mjs"
+    "prebuild": "node scripts/copy-worker.mjs",
+    "postinstall": "node scripts/copy-worker.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

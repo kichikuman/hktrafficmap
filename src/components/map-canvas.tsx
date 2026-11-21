@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import type { Map as MaplibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { cameraGeoJson, lineGeoJson, stationGeoJson } from "@/lib/geo"
+import { mapFailureMessage } from "@/lib/map-status"
 import type { Selection } from "@/lib/types"
 
 const MTR_LAYERS = ["line-casing", "line", "stations", "station-label", "station-selected"]
@@ -14,7 +15,7 @@ type MapCanvasProps = {
   showCameras: boolean
   selection: Selection | null
   onSelect: (selection: Selection | null) => void
-  onStyleError: (message: string) => void
+  onStyleError: (message: string | null) => void
 }
 
 export function MapCanvas({
@@ -57,10 +58,6 @@ export function MapCanvas({
         zoom: 10,
         minZoom: 9,
         maxZoom: 18,
-        maxBounds: [
-          [113.7, 22.08],
-          [114.58, 22.64],
-        ],
         dragRotate: true,
         pitchWithRotate: false,
         touchPitch: false,
@@ -80,17 +77,14 @@ export function MapCanvas({
       let loaded = false
       map.on("error", (event) => {
         if (loaded) return
-        const message = String(event.error?.message ?? "")
-        if (/webgl/i.test(message)) {
-          onStyleErrorRef.current("這個瀏覽器未能開啟地圖繪圖。請改用已開啟圖像加速的 Chrome、Edge 或 Firefox。")
-        } else if (/style/i.test(message)) {
-          onStyleErrorRef.current("底圖暫時未能載入。請檢查網絡後再重新開啟。")
-        }
+        const failure = mapFailureMessage(String(event.error?.message ?? ""))
+        if (failure) onStyleErrorRef.current(failure)
       })
 
       map.on("load", () => {
         if (!map || cancelled) return
         loaded = true
+        onStyleErrorRef.current(null)
         map.addSource("mtr-lines", { type: "geojson", data: lineGeoJson })
         map.addSource("mtr-stations", { type: "geojson", data: stationGeoJson })
         map.addSource("cameras", { type: "geojson", data: cameraGeoJson })
@@ -254,11 +248,7 @@ export function MapCanvas({
       })
       } catch (error) {
         const message = error instanceof Error ? error.message : ""
-        if (/webgl/i.test(message)) {
-          onStyleErrorRef.current("這個瀏覽器未能開啟地圖繪圖。請改用已開啟圖像加速的 Chrome、Edge 或 Firefox。")
-        } else {
-          onStyleErrorRef.current("底圖暫時未能載入。請檢查網絡後再重新開啟。")
-        }
+        onStyleErrorRef.current(mapFailureMessage(message) ?? "底圖暫時未能載入。請檢查網絡後再重新開啟。")
       }
     })()
 

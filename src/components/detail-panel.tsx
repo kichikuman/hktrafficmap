@@ -150,15 +150,15 @@ function ScheduleBody({ result }: { result: ParsedSchedule }) {
         <p className="rounded-xl bg-muted px-3 py-2 text-sm leading-6">這個車站暫時沒有到站班次。</p>
       ) : (
         <>
-          {result.directions.map((direction, index) => (
-            <div key={index} className="space-y-2">
-              {index > 0 ? <Separator /> : null}
-              {direction.map((group) => (
-                <div key={group.destination}>
+          {result.directions.map((direction, directionIndex) => (
+            <div key={directionIndex} className="space-y-2">
+              {directionIndex > 0 ? <Separator /> : null}
+              {direction.map((group, groupIndex) => (
+                <div key={`${directionIndex}-${groupIndex}`}>
                   <h3 className="text-sm font-semibold">{group.destination}</h3>
                   <ul className="mt-1 space-y-1">
                     {group.trains.map((train, trainIndex) => (
-                      <li key={trainIndex} className="flex flex-wrap gap-x-3 text-sm">
+                      <li key={`${groupIndex}-${trainIndex}`} className="flex flex-wrap gap-x-3 text-sm">
                         <span className="font-medium">{train.wait}</span>
                         {train.platform ? <span className="text-muted-foreground">月台 {train.platform}</span> : null}
                         {train.clock ? <span className="text-muted-foreground">{train.clock}</span> : null}
@@ -180,6 +180,7 @@ function ScheduleBody({ result }: { result: ParsedSchedule }) {
 
 function CameraBoard({ camera }: { camera: Camera }) {
   const [result, setResult] = useState<SnapshotResult | "loading">("loading")
+  const [imageFailed, setImageFailed] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -205,7 +206,7 @@ function CameraBoard({ camera }: { camera: Camera }) {
     )
   }
 
-  if (result.kind === "error") {
+  if (result.kind === "error" || imageFailed) {
     return (
       <p className="rounded-xl bg-muted px-3 py-3 text-sm leading-6">暫時未能取得這張快拍照片。</p>
     )
@@ -223,6 +224,7 @@ function CameraBoard({ camera }: { camera: Camera }) {
           src={result.objectUrl}
           alt="暫時未能提供服務"
           className="w-full rounded-xl border bg-amber-100"
+          onError={() => setImageFailed(true)}
         />
       </div>
     )
@@ -236,6 +238,7 @@ function CameraBoard({ camera }: { camera: Camera }) {
         src={result.objectUrl}
         alt={`${camera.description}的最新交通快拍`}
         className="w-full rounded-xl border bg-muted"
+        onError={() => setImageFailed(true)}
       />
       <p className="text-xs text-muted-foreground">編號 {camera.key}</p>
     </div>

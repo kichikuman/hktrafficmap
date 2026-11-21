@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
-import { formatUpdated, parseSchedule } from "../src/lib/schedule.ts"
-import { isServicePlaceholder } from "../src/lib/snapshot.ts"
+import { mapFailureMessage } from "../src/lib/map-status.ts"
+import { fetchSchedule, formatUpdated, parseSchedule } from "../src/lib/schedule.ts"
+import { classifySnapshot, loadSnapshot } from "../src/lib/snapshot.ts"
 
 const now = new Date("2026-11-21T02:40:00Z")
 const names = { CHW: "柴灣", KET: "堅尼地城", POA: "寶琳" }
@@ -151,8 +153,90 @@ test("rejects an untrusted link and an unknown failure", () => {
   if (unknown.state === "error") assert.equal(unknown.title, "暫時取不到到站資料。")
 })
 
-test("formats an older timestamp and recognises the service image", () => {
+test("keeps interleaved destinations as separate groups", () => {
+  const board = parseSchedule(
+    {
+      status: 1,
+      data: {
+        "TKL-TKO": {
+          UP: [
+            { seq: "1", dest: "POA", plat: "1", time: "2026-11-21 10:40:00", ttnt: "2", valid: "Y" },
+            { seq: "2", dest: "LHP", plat: "1", time: "2026-11-21 10:44:00", ttnt: "6", valid: "Y" },
+            { seq: "3", dest: "POA", plat: "1", time: "2026-11-21 10:48:00", ttnt: "10", valid: "Y" },
+          ],
+          DOWN: [],
+        },
+      },
+    },
+    "TKL",
+    "TKO",
+    { POA: "寶琳", LHP: "康城" },
+    false,
+    now,
+  )
+  assert.equal(board.state, "board")
+  if (board.state !== "board") return
+  assert.deepEqual(
+    board.directions[0].map((group) => group.destination),
+    ["往寶琳", "往康城", "往寶琳"],
+  )
+  assert.equal(board.directions[0][0].trains.length, 1)
+  assert.equal(board.directions[0][2].trains.length, 1)
+})
+
+test("formats an older timestamp and recognises the service image", async () => {
   assert.equal(formatUpdated("2026-11-20 23:10:00", now), "11月20日 23:10")
-  assert.equal(isServicePlaceholder(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])), true)
-  assert.equal(isServicePlaceholder(Uint8Array.from([0xff, 0xd8, 0xff, 0x00])), false)
+  const placeholder = new Uint8Array(readFileSync(new URL("./fixtures/td-service-unavailable.gif", import.meta.url)))
+  assert.equal(await classifySnapshot(placeholder), "unavailable")
+  assert.equal(await classifySnapshot(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x00])), "invalid")
+  assert.equal(await classifySnapshot(Uint8Array.from([0xff, 0xd8, 0xff, 0x00])), "photo")
+  assert.equal(await classifySnapshot(Uint8Array.from([0x3c, 0x68, 0x74, 0x6d, 0x6c])), "invalid")
+})
+
+test("maps rate limits, invalid payloads, and aborted requests", async () => {
+  const original = globalThis.fetch
+  const signal = new AbortController().signal
+  try {
+    globalThis.fetch = async () => new Response("", { status: 429 })
+    const limited = await fetchSchedule("ISL", "CEN", names, false, signal)
+    assert.equal(limited?.state, "error")
+    if (limited?.state === "error") assert.match(limited.title, /太頻繁/)
+
+    globalThis.fetch = async () => new Response("<html>", { status: 200 })
+    const invalid = await fetchSchedule("ISL", "CEN", names, false, signal)
+    assert.equal(invalid?.state, "error")
+
+    globalThis.fetch = async () => {
+      throw new DOMException("The operation was aborted.", "AbortError")
+    }
+    assert.equal(await fetchSchedule("ISL", "CEN", names, false, signal), null)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("rejects snapshots that are not a road photo or the official notice", async () => {
+  const original = globalThis.fetch
+  try {
+    globalThis.fetch = async () => new Response("<html>", { status: 200 })
+    const html = await loadSnapshot("https://tdcctv.data.one.gov.hk/H107F.JPG", new AbortController().signal)
+    assert.equal(html?.kind, "error")
+
+    globalThis.fetch = async () => new Response(Uint8Array.from([0xff, 0xd8, 0xff, 1, 2, 3]), { status: 200 })
+    const photo = await loadSnapshot("https://tdcctv.data.one.gov.hk/H429F.JPG", new AbortController().signal)
+    assert.equal(photo?.kind, "photo")
+    if (photo?.kind === "photo") URL.revokeObjectURL(photo.objectUrl)
+
+    const foreign = await loadSnapshot("https://example.com/camera.jpg", new AbortController().signal)
+    assert.equal(foreign?.kind, "error")
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("ignores incidental map errors and names worker, graphics, and basemap failures", () => {
+  assert.equal(mapFailureMessage("style image missing"), null)
+  assert.match(mapFailureMessage("Failed to load style: https://tiles.openfreemap.org/styles/liberty") ?? "", /底圖/)
+  assert.match(mapFailureMessage("WebGL2 is required") ?? "", /圖像加速/)
+  assert.match(mapFailureMessage("Failed to fetch worker script") ?? "", /地圖元件/)
 })
