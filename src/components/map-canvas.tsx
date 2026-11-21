@@ -242,6 +242,7 @@ export function MapCanvas({
             visibility: trainVisibility,
           },
         })
+        map.moveLayer("trains", "stations")
 
         const bounds = new maplibregl.LngLatBounds()
         for (const feature of stationGeoJson.features) {
@@ -259,6 +260,17 @@ export function MapCanvas({
         })
 
         map.on("click", (event) => {
+          const stations =
+            map?.queryRenderedFeatures(event.point, {
+              layers: ["stations", "station-selected", "station-label"],
+            }) ?? []
+          const stationCode = stations.find((feature) => feature.properties?.code)?.properties?.code
+          if (typeof stationCode === "string" && stationCode) {
+            openTrainRef.current = null
+            popupRef.current?.remove()
+            onSelectRef.current({ type: "station", code: stationCode })
+            return
+          }
           const trainHits = map?.queryRenderedFeatures(event.point, { layers: ["trains"] }) ?? []
           const train = trainHits.find((feature) => feature.properties?.title)
           if (train?.properties && map) {
@@ -282,13 +294,6 @@ export function MapCanvas({
           }
           openTrainRef.current = null
           popupRef.current?.remove()
-          const stations =
-            map?.queryRenderedFeatures(event.point, { layers: ["stations", "station-label"] }) ?? []
-          const stationCode = stations[0]?.properties?.code
-          if (typeof stationCode === "string" && stationCode) {
-            onSelectRef.current({ type: "station", code: stationCode })
-            return
-          }
           const hits = map?.queryRenderedFeatures(event.point, { layers: ["cameras"] }) ?? []
           const key = hits[0]?.properties?.key
           if (typeof key === "string" && key) {
