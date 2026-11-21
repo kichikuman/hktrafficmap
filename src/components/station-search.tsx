@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
+import { Search, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { lineByCode, network } from "@/lib/geo"
 import { searchStations } from "@/lib/station-search"
@@ -58,33 +59,53 @@ export function StationSearch({ onSelect }: StationSearchProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative min-w-[16rem] flex-1">
+    <div
+      ref={containerRef}
+      className="station-search pointer-events-auto absolute top-[var(--map-chrome-top,7.5rem)] left-[3.75rem] z-20 w-[17.5rem] max-w-[calc(100%-4.75rem)]"
+    >
       <label htmlFor={`${listId}-input`} className="sr-only">
         搜尋港鐵站
       </label>
-      <Input
-        id={`${listId}-input`}
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={showList}
-        aria-controls={listId}
-        aria-activedescendant={activeId}
-        placeholder="搜尋車站，中文或英文"
-        value={query}
-        autoComplete="off"
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setActiveIndex(0)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-      />
+      <div className="flex h-10 items-center gap-2 rounded-full border bg-background/95 pr-1.5 pl-3 shadow-lg backdrop-blur-md">
+        <Search className="size-4 shrink-0 text-muted-foreground" />
+        <Input
+          id={`${listId}-input`}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={showList}
+          aria-controls={listId}
+          aria-activedescendant={activeId}
+          placeholder="車站，中文或英文"
+          value={query}
+          autoComplete="off"
+          className="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:border-transparent focus-visible:ring-0"
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setActiveIndex(0)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+        />
+        {query ? (
+          <button
+            type="button"
+            className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="清除搜尋"
+            onClick={() => {
+              setQuery("")
+              setOpen(false)
+            }}
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
       {showList ? (
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 top-[calc(100%+0.35rem)] z-30 max-h-72 overflow-y-auto rounded-xl border bg-background p-1 shadow-xl"
+          className="absolute inset-x-0 top-[calc(100%+0.4rem)] z-30 max-h-64 overflow-y-auto rounded-2xl border bg-background p-1 shadow-xl"
         >
           {results.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted-foreground">找不到這個車站</li>

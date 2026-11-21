@@ -78,7 +78,7 @@ export function MapApp() {
         ref={headerRef}
         className="absolute inset-x-3 top-3 z-20 rounded-2xl border bg-background/95 shadow-lg backdrop-blur-md"
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 pt-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
           <div className="min-w-[12rem] flex-1">
             <h1 className="text-base font-semibold tracking-tight">香港智慧城市地圖</h1>
             <p className="text-xs text-muted-foreground">點車站查到站班次，點快拍點看最新照片</p>
@@ -105,9 +105,6 @@ export function MapApp() {
             路綫圖例
           </Button>
         </div>
-        <div className="px-3 pt-2">
-          <StationSearch onSelect={chooseStation} />
-        </div>
         {legendOpen ? (
           <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t px-3 py-2.5 sm:grid-cols-5">
             {network.lines.map((line) => (
@@ -122,6 +119,8 @@ export function MapApp() {
           底圖 OpenFreeMap、OpenMapTiles、OpenStreetMap · 車站位置地政總署 · 班次港鐵 · 快拍運輸署
         </p>
       </header>
+
+      <StationSearch onSelect={chooseStation} />
 
       {!showLines && !showCameras ? (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 px-6 text-center">
