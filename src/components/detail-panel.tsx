@@ -5,7 +5,8 @@ import { RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { lineByCode, stationNames } from "@/lib/geo"
-import { fetchSchedule, inkOn, type ParsedSchedule } from "@/lib/schedule"
+import { inkOn, type ParsedSchedule } from "@/lib/schedule"
+import { fetchStationSchedule } from "@/lib/train-feed"
 import { loadSnapshot, type SnapshotResult } from "@/lib/snapshot"
 import type { Camera, Station } from "@/lib/types"
 
@@ -64,7 +65,7 @@ export function DetailPanel({ station, camera, refreshToken, onClose, onRefresh 
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <p className="text-xs leading-5 text-muted-foreground">
           {station
-            ? "班次約每 10 秒更新。按重新整理取得最新資料。"
+            ? "到站班次來自港鐵。按重新整理取得最新已快取的資料。"
             : "照片約每兩分鐘更新。"}
         </p>
         <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
@@ -84,7 +85,7 @@ function StationBoard({ station }: { station: Station }) {
   useEffect(() => {
     const controller = new AbortController()
     for (const line of station.lines) {
-      fetchSchedule(
+      fetchStationSchedule(
         line,
         station.code,
         stationNames,

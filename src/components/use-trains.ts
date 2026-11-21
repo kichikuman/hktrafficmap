@@ -1,10 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { fetchArrivals } from "@/lib/train-feed"
+import { fetchArrivals, trainRefreshMs } from "@/lib/train-feed"
 import { placeTrains, type PlacedTrain } from "@/lib/trains"
-
-const REFRESH_MS = 90_000
 
 export type TrainStatus = "off" | "loading" | "ready" | "stale"
 
@@ -17,7 +15,7 @@ export function useTrains(enabled: boolean): { trains: PlacedTrain[]; status: Tr
     let cancelled = false
     let running = false
     let fetchedAt = 0
-    let refreshMs = REFRESH_MS
+    let refreshMs = trainRefreshMs()
     let snapshot: PlacedTrain[] = []
     const controller = new AbortController()
 
@@ -31,7 +29,7 @@ export function useTrains(enabled: boolean): { trains: PlacedTrain[]; status: Tr
         const now = Date.now()
         snapshot = placeTrains(result.arrivals, now)
         fetchedAt = now
-        refreshMs = result.limited || result.ok === 0 ? 20_000 : REFRESH_MS
+        refreshMs = result.limited || result.ok === 0 ? 20_000 : trainRefreshMs()
         setTrains(snapshot)
         setStatus(result.limited || result.ok === 0 ? "stale" : "ready")
       } catch (error) {
