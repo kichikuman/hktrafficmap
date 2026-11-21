@@ -72,7 +72,7 @@ export function MapCanvas({
         center: [114.15, 22.36],
         zoom: 10,
         minZoom: 9,
-        maxZoom: 18,
+        maxZoom: 16,
         dragRotate: true,
         pitchWithRotate: false,
         touchPitch: false,

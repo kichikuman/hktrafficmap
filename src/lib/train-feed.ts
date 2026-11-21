@@ -3,7 +3,7 @@ import { fetchSchedule, type ParsedSchedule } from "@/lib/schedule"
 import { readArrivals, trainSamples, type Arrival } from "@/lib/trains"
 
 const GAP_MS = 200
-const CLIENT_TTL_MS = 30_000
+const CLIENT_TTL_MS = 120_000
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -23,7 +23,7 @@ export function trainCacheUrl(): string {
 }
 
 export function trainRefreshMs(): number {
-  return trainCacheUrl() ? 60_000 : 90_000
+  return trainCacheUrl() ? 120_000 : 90_000
 }
 
 let memory: { at: number; doc: TrainCache } | null = null

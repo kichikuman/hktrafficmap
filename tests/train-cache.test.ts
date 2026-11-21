@@ -42,7 +42,8 @@ test("keeps the last good timetable when a later fetch fails", () => {
       "ISL-CEN": {
         fetchedAt: "2026-11-21T06:00:00.000Z",
         ok: true,
-        payload: { status: 1 },
+        status: 1,
+        up: [{ dest: "CHW", ttnt: "2", valid: "Y" }],
       },
     },
   }
@@ -53,27 +54,23 @@ test("keeps the last good timetable when a later fetch fails", () => {
   )
   assert.equal(merged.entries["ISL-CEN"]?.ok, false)
   assert.equal(merged.entries["ISL-CEN"]?.error, "429")
-  assert.deepEqual(merged.entries["ISL-CEN"]?.payload, { status: 1 })
+  assert.equal(merged.entries["ISL-CEN"]?.up?.[0]?.dest, "CHW")
   assert.equal(cacheIsStale(merged, Date.parse("2026-11-21T07:06:00.000Z")), true)
   assert.equal(cacheIsStale(merged, Date.parse("2026-11-21T07:01:00.000Z")), false)
 })
 
 test("reads a station board and train list from the shared file", () => {
-  const payload = {
-    status: 1,
-    isdelay: "N",
-    sys_time: "2026-11-21 15:00:00",
-    data: {
-      "ISL-CEN": {
-        sys_time: "2026-11-21 15:00:00",
-        UP: [{ seq: "1", dest: "CHW", plat: "3", time: "2026-11-21 15:02:00", ttnt: "2", valid: "Y" }],
-        DOWN: [],
-      },
-    },
-  }
   const doc: TrainCache = {
     updatedAt: "2026-11-21T07:00:00.000Z",
-    entries: { "ISL-CEN": { fetchedAt: "2026-11-21T07:00:00.000Z", ok: true, payload } },
+    entries: {
+      "ISL-CEN": {
+        fetchedAt: "2026-11-21T07:00:00.000Z",
+        ok: true,
+        status: 1,
+        sysTime: "2026-11-21 15:00:00",
+        up: [{ seq: "1", dest: "CHW", plat: "3", time: "2026-11-21 15:02:00", ttnt: "2", valid: "Y" }],
+      },
+    },
   }
   const board = scheduleFromCache(doc, "ISL", "CEN", { CHW: "柴灣" }, false, now)
   assert.equal(board?.state, "board")
@@ -92,7 +89,12 @@ test("stops a refresh batch on the first rate limit and writes the merged file",
           return JSON.stringify({
             updatedAt: "2026-11-21T06:59:00.000Z",
             entries: {
-              "TWL-TST": { fetchedAt: "2026-11-21T06:59:00.000Z", ok: true, payload: { status: 1, data: {} } },
+              "TWL-TST": {
+                fetchedAt: "2026-11-21T06:00:00.000Z",
+                ok: true,
+                status: 1,
+                up: [{ dest: "CEN", ttnt: "1", valid: "Y" }],
+              },
             },
           })
         },
@@ -112,11 +114,97 @@ test("stops a refresh batch on the first rate limit and writes the merged file",
     if (station === "TST") return new Response("busy", { status: 429 })
     return Response.json({ status: 1, data: { "ISL-CEN": { UP: [], DOWN: [] } } })
   }) as typeof fetch
-  const next = await refreshTrainCache(bucket, fetcher, now, pairs)
+  const next = await refreshTrainCache(bucket, fetcher, now, pairs, 0)
   assert.equal(next.entries["ISL-CEN"]?.ok, true)
   assert.equal(next.entries["TWL-TST"]?.ok, false)
   assert.equal(next.entries["TWL-TST"]?.error, "429")
-  assert.deepEqual((next.entries["TWL-TST"]?.payload as { status: number }).status, 1)
-  assert.equal(stored.cacheControl, "public, max-age=30")
+  assert.equal(next.entries["TWL-TST"]?.up?.[0]?.dest, "CEN")
+  assert.equal(next.retryAt, "2026-11-21T07:10:00.000Z")
+  assert.equal(cacheIsStale(next, now.getTime()), true)
+  assert.equal(stored.cacheControl, "public, max-age=120, stale-while-revalidate=300")
   assert.equal(parseTrainCache(JSON.parse(stored.body ?? ""))?.updatedAt, now.toISOString())
+})
+
+test("does not call MTR during a cooldown", async () => {
+  let called = false
+  let written = false
+  const bucket: CacheBucket = {
+    async get() {
+      return {
+        async text() {
+          return JSON.stringify({
+            updatedAt: "2026-11-21T06:50:00.000Z",
+            retryAt: "2026-11-21T07:10:00.000Z",
+            entries: {},
+          })
+        },
+      }
+    },
+    async put() {
+      written = true
+    },
+  }
+  const fetcher = (() => {
+    called = true
+    return Promise.resolve(new Response("no"))
+  }) as typeof fetch
+  const next = await refreshTrainCache(bucket, fetcher, now, [{ line: "ISL", station: "CEN" }], 0)
+  assert.equal(called, false)
+  assert.equal(written, false)
+  assert.equal(next.retryAt, "2026-11-21T07:10:00.000Z")
+})
+
+test("skips a stop that was fetched inside the rotation window", async () => {
+  const asked: string[] = []
+  const bucket: CacheBucket = {
+    async get() {
+      return {
+        async text() {
+          return JSON.stringify({
+            updatedAt: "2026-11-21T06:59:30.000Z",
+            entries: {
+              "ISL-CEN": { fetchedAt: "2026-11-21T06:59:30.000Z", ok: true, status: 1 },
+            },
+          })
+        },
+      }
+    },
+    async put() {},
+  }
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const station = new URL(String(input)).searchParams.get("sta") ?? ""
+    asked.push(station)
+    return Response.json({ status: 1, data: { [`TWL-${station}`]: { UP: [], DOWN: [] } } })
+  }) as typeof fetch
+  await refreshTrainCache(
+    bucket,
+    fetcher,
+    now,
+    [
+      { line: "ISL", station: "CEN" },
+      { line: "TWL", station: "TST" },
+    ],
+    0,
+  )
+  assert.deepEqual(asked, ["TST"])
+})
+
+test("leaves updatedAt unchanged when every fetch is rate limited", async () => {
+  const bucket: CacheBucket = {
+    async get() {
+      return {
+        async text() {
+          return JSON.stringify({
+            updatedAt: "2026-11-21T06:00:00.000Z",
+            entries: {},
+          })
+        },
+      }
+    },
+    async put() {},
+  }
+  const fetcher = (async () => new Response("busy", { status: 429 })) as typeof fetch
+  const next = await refreshTrainCache(bucket, fetcher, now, [{ line: "ISL", station: "CEN" }], 0)
+  assert.equal(next.updatedAt, "2026-11-21T06:00:00.000Z")
+  assert.equal(cacheIsStale(next, now.getTime()), true)
 })
