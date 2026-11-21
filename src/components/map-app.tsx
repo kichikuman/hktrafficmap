@@ -6,12 +6,14 @@ import { Switch } from "@/components/ui/switch"
 import { DetailPanel } from "@/components/detail-panel"
 import { MapCanvas } from "@/components/map-canvas"
 import { StationSearch } from "@/components/station-search"
+import { useTrains } from "@/components/use-trains"
 import { cameraByKey, network, stationByCode } from "@/lib/geo"
 import type { Selection, Station } from "@/lib/types"
 
 export function MapApp() {
   const [showLines, setShowLines] = useState(true)
   const [showCameras, setShowCameras] = useState(true)
+  const [showTrains, setShowTrains] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -19,13 +21,23 @@ export function MapApp() {
   const [focus, setFocus] = useState<{ code: string; nonce: number } | null>(null)
   const lineSwitchId = useId()
   const cameraSwitchId = useId()
+  const trainSwitchId = useId()
+  const { trains, status: trainStatus } = useTrains(showTrains)
 
   const station = selection?.type === "station" ? stationByCode.get(selection.code) : undefined
   const camera = selection?.type === "camera" ? cameraByKey.get(selection.key) : undefined
 
   function changeLines(checked: boolean) {
     setShowLines(checked)
-    if (!checked && selection?.type === "station") setSelection(null)
+    if (!checked) {
+      setShowTrains(false)
+      if (selection?.type === "station") setSelection(null)
+    }
+  }
+
+  function changeTrains(checked: boolean) {
+    setShowTrains(checked)
+    if (checked) setShowLines(true)
   }
 
   function changeCameras(checked: boolean) {
@@ -45,6 +57,8 @@ export function MapApp() {
       <MapCanvas
         showLines={showLines}
         showCameras={showCameras}
+        showTrains={showTrains}
+        trains={trains}
         selection={selection}
         focus={focus}
         onSelect={(next) => {
@@ -71,6 +85,12 @@ export function MapApp() {
                 快拍
               </label>
             </div>
+            <div className="flex items-center gap-1.5">
+              <Switch id={trainSwitchId} size="sm" checked={showTrains} onCheckedChange={changeTrains} />
+              <label htmlFor={trainSwitchId} className="text-sm">
+                列車
+              </label>
+            </div>
             <Button
               type="button"
               variant={legendOpen ? "secondary" : "outline"}
@@ -91,6 +111,11 @@ export function MapApp() {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {trainStatus === "loading" || trainStatus === "stale" ? (
+            <p className="rounded-full bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-lg">
+              {trainStatus === "loading" ? "正在取得列車位置" : "列車位置暫時未能更新"}
+            </p>
           ) : null}
         </div>
       </div>
